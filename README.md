@@ -1,5 +1,7 @@
 # mediathek
 
+![Logo](./img/logo.png)
+
 A little daemon which downloads the latest videos from [https://mediathekviewweb.de](https://mediathekviewweb.de).
 
 ## usage
