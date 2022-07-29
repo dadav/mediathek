@@ -11,6 +11,9 @@ A little daemon which downloads the latest videos from [https://mediathekviewweb
 # just list the videos
 mediathek -query tatort
 
+# list different videos
+mediathek -query "tatort | sendung mit der maus"
+
 # download all matches
 mediathek -query tatort -download
 
