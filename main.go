@@ -19,6 +19,11 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
+const (
+	version = "0.1.0"
+)
+
+var versionFlag bool
 var queryString string
 var downloadFlag bool
 var outputPath string
@@ -33,6 +38,7 @@ const baseUrl string = "https://mediathekviewweb.de/feed?query=%s&everywhere=tru
 var seen []Job
 
 func init() {
+	flag.BoolVar(&versionFlag, "version", false, "show the current version and exit")
 	flag.StringVar(&queryString, "query", "", "search query for the mediathek (use | to separate queries)")
 	flag.StringVar(&outputPath, "output", "./output", "output path (will be created if not exists)")
 	flag.BoolVar(&downloadFlag, "download", false, "download all matches")
@@ -161,6 +167,11 @@ func formatQuery(q string) string {
 }
 
 func main() {
+	if versionFlag {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
 	var queries []string
 
 	if queryString != "" {
