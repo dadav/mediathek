@@ -33,7 +33,7 @@ const baseUrl string = "https://mediathekviewweb.de/feed?query=%s&everywhere=tru
 var seen []Job
 
 func init() {
-	flag.StringVar(&queryString, "query", "", "search query for the mediathek")
+	flag.StringVar(&queryString, "query", "", "search query for the mediathek (use | to separate queries)")
 	flag.StringVar(&outputPath, "output", "./output", "output path (will be created if not exists)")
 	flag.BoolVar(&downloadFlag, "download", false, "download all matches")
 	flag.BoolVar(&serverModeFlag, "server", false, "start server mode")
@@ -164,8 +164,10 @@ func main() {
 	var queries []string
 
 	if queryString != "" {
-		queryUrl := formatQuery(queryString)
-		queries = append(queries, queryUrl)
+		for _, singleQueryString := range strings.Split(queryString, "|") {
+			queryURL := formatQuery(singleQueryString)
+			queries = append(queries, queryURL)
+		}
 	}
 
 	if queryListPath != "" {
