@@ -196,6 +196,12 @@ func main() {
 		}
 	}
 
+	if queryString == "" && queryListPath == "" {
+		fmt.Fprintf(os.Stderr, "Usage of mediathek:\n")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
 	if serverModeFlag {
 		for {
 			fetch(queries)
