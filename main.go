@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	version = "0.1.0"
+	version = "0.2.0"
 )
 
+var operationalHours string
 var versionFlag bool
 var queryString string
 var downloadFlag bool
@@ -40,6 +41,7 @@ var seen []Job
 func init() {
 	flag.BoolVar(&versionFlag, "version", false, "show the current version and exit")
 	flag.StringVar(&queryString, "query", "", "search query for the mediathek (use | to separate queries)")
+	flag.StringVar(&operationalHours, "hours", "", "the hours when the downloads should be executed (separated by comma, e.g. 1,2,3,4)")
 	flag.StringVar(&outputPath, "output", "./output", "output path (will be created if not exists)")
 	flag.BoolVar(&downloadFlag, "download", false, "download all matches")
 	flag.BoolVar(&serverModeFlag, "server", false, "start server mode")
@@ -166,6 +168,23 @@ func formatQuery(q string) string {
 	return fmt.Sprintf(baseUrl, url.QueryEscape(q))
 }
 
+func shouldRun(hours string) bool {
+	if hours == "" {
+		return true
+	}
+
+	now := time.Now().Hour()
+	for _, hour := range strings.Split(operationalHours, ",") {
+		if hourInt, err := strconv.Atoi(hour); err == nil {
+			if now == hourInt {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func main() {
 	if versionFlag {
 		fmt.Println(version)
@@ -204,7 +223,10 @@ func main() {
 
 	if serverModeFlag {
 		for {
-			fetch(queries)
+			if shouldRun(operationalHours) {
+				fetch(queries)
+			}
+
 			time.Sleep(time.Duration(interval) * time.Second)
 		}
 	} else {
