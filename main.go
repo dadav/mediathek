@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cavaliergopher/grab/v3"
@@ -20,9 +19,11 @@ import (
 )
 
 const (
-	version = "0.2.0"
+	version = "0.3.0"
+	trackFile = "~/.mediathek"
 )
 
+var noTrackingFlag bool
 var operationalHours string
 var versionFlag bool
 var queryString string
@@ -34,9 +35,10 @@ var minimumVideoLenMinutes uint64
 var parallelDownloadsNum uint64
 var interval uint64
 
-const baseUrl string = "https://mediathekviewweb.de/feed?query=%s&everywhere=true&future=false"
+const baseURL string = "https://mediathekviewweb.de/feed?query=%s&everywhere=true&future=false"
 
 var seen []Job
+var downloadedFiles []string
 
 func init() {
 	flag.BoolVar(&versionFlag, "version", false, "show the current version and exit")
@@ -45,6 +47,7 @@ func init() {
 	flag.StringVar(&outputPath, "output", "./output", "output path (will be created if not exists)")
 	flag.BoolVar(&downloadFlag, "download", false, "download all matches")
 	flag.BoolVar(&serverModeFlag, "server", false, "start server mode")
+	flag.BoolVar(&noTrackingFlag, "no-track", false, "don't track already downloaded files")
 	flag.StringVar(&queryListPath, "query-file", "", "path to a file containing query strings")
 	flag.Uint64Var(&minimumVideoLenMinutes, "min", 20, "the minimum video length in minutes")
 	flag.Uint64Var(&parallelDownloadsNum, "parallel", uint64(runtime.NumCPU()), "number of parallel downloads")
@@ -53,38 +56,49 @@ func init() {
 	flag.Parse()
 }
 
+// Job contains information about a video
 type Job struct {
 	url       string
 	fileName  string
 	outputDir string
 }
 
-func downloader(jobs <-chan *Job, wg *sync.WaitGroup) {
-	client := grab.NewClient()
-	for job := range jobs {
-		if err := os.MkdirAll(job.outputDir, os.ModePerm); err != nil {
-			log.Fatal(err)
-		}
-
-		dst := filepath.Join(job.outputDir, job.fileName+".mp4")
-		req, err := grab.NewRequest(dst, job.url)
-		if err != nil {
-			log.Fatal(err)
-		}
-		resp := client.Do(req)
-		<-resp.Done
+func loadTrackFile(path string) ([]string, error) {
+	var err error
+	path, err = expandPath(path)
+	if err != nil {
+		return nil, err
 	}
-	wg.Done()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return []string{}, nil
+	}
+
+	if info.IsDir() {
+		return nil, fmt.Errorf("%s is a directory", path)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	var content []string
+	for scanner.Scan() {
+		content = append(content, scanner.Text())
+	}
+	return content, nil
 }
 
-func expandDir(dir string) (string, error) {
+func expandPath(dir string) (string, error) {
 	if strings.HasPrefix(dir, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
-		} else {
-			return filepath.Join(home, dir[2:]), nil
 		}
+		return filepath.Join(home, dir[2:]), nil
 	}
 	return dir, nil
 }
@@ -93,6 +107,13 @@ func alreadyDownloaded(job Job) bool {
 	for _, knownJob := range seen {
 		if job == knownJob {
 			return true
+		}
+		if !noTrackingFlag {
+			for _, knownURL := range downloadedFiles {
+				if job.url == knownURL {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -112,7 +133,7 @@ func fetch(urls []string) {
 
 					if uint64(videoLen/60) >= minimumVideoLenMinutes {
 						if serverModeFlag || downloadFlag {
-							out, expandErr := expandDir(outputPath)
+							out, expandErr := expandPath(outputPath)
 							if expandErr != nil {
 								log.Fatal(expandErr)
 							}
@@ -126,6 +147,8 @@ func fetch(urls []string) {
 								fmt.Printf("Downloading \"%s\"\n", item.Title)
 								seen = append(seen, j)
 								jobs = append(jobs, j)
+							} else {
+								fmt.Printf("Skip: %s (Reason: Already downloaded)\n", item.Title)
 							}
 						} else {
 							fmt.Printf("%s | %d mins\n", item.Title, uint64(videoLen/60))
@@ -147,25 +170,45 @@ func fetch(urls []string) {
 				dst := filepath.Join(job.outputDir, job.fileName+".mp4")
 				req, err := grab.NewRequest(dst, job.url)
 				if err == nil {
-
 					reqs = append(reqs, req)
 				}
-
 			}
 
 			client := grab.NewClient()
 			resp := client.DoBatch(int(parallelDownloadsNum), reqs...)
 			for r := range resp {
 				if err := r.Err(); err != nil {
-					log.Fatal(err)
+					fmt.Println(err)
+					continue
+				}
+				if !noTrackingFlag {
+					downloadedFiles = append(downloadedFiles, r.Request.URL().String())
+					addToDownloadList(trackFile, r.Request.URL().String())
 				}
 			}
 		}
 	}
 }
 
+func addToDownloadList(path, url string) error {
+	var err error
+	path, err = expandPath(path)
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	if _, err := file.WriteString(fmt.Sprintf("%s\n", url)); err != nil {
+		log.Fatal(err)
+	}
+	return nil
+}
+
 func formatQuery(q string) string {
-	return fmt.Sprintf(baseUrl, url.QueryEscape(q))
+	return fmt.Sprintf(baseURL, url.QueryEscape(q))
 }
 
 func shouldRun(hours string) bool {
@@ -219,6 +262,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage of mediathek:\n")
 		flag.PrintDefaults()
 		os.Exit(1)
+	}
+
+	var err error
+	downloadedFiles, err = loadTrackFile(trackFile)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	if serverModeFlag {
