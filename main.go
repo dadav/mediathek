@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	version = "0.3.0"
+	version = "0.3.1"
 	trackFile = "~/.mediathek"
 )
 
@@ -274,6 +274,9 @@ func main() {
 		for {
 			if shouldRun(operationalHours) {
 				fetch(queries)
+			} else {
+				time.Sleep(time.Duration(1) * time.Minute)
+				continue
 			}
 
 			time.Sleep(time.Duration(interval) * time.Second)
