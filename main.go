@@ -20,11 +20,11 @@ import (
 
 const (
 	version = "0.3.1"
-	trackFile = "~/.mediathek"
 )
 
 var noTrackingFlag bool
 var operationalHours string
+var trackFile string
 var versionFlag bool
 var queryString string
 var downloadFlag bool
@@ -52,6 +52,7 @@ func init() {
 	flag.Uint64Var(&minimumVideoLenMinutes, "min", 20, "the minimum video length in minutes")
 	flag.Uint64Var(&parallelDownloadsNum, "parallel", uint64(runtime.NumCPU()), "number of parallel downloads")
 	flag.Uint64Var(&interval, "interval", 60, "fetch interval in seconds (for server mode)")
+	flag.StringVar(&trackFile, "track-file", "~/.mediathek", "location of the track file")
 
 	flag.Parse()
 }
