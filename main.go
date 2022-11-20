@@ -27,6 +27,7 @@ var operationalHours string
 var trackFile string
 var versionFlag bool
 var queryString string
+var excludeString string
 var downloadFlag bool
 var outputPath string
 var serverModeFlag bool
@@ -43,6 +44,7 @@ var downloadedFiles []string
 func init() {
 	flag.BoolVar(&versionFlag, "version", false, "show the current version and exit")
 	flag.StringVar(&queryString, "query", "", "search query for the mediathek (use | to separate queries)")
+	flag.StringVar(&excludeString, "exclude", "", "exclude query for the found videos (use | to separate excludes)")
 	flag.StringVar(&operationalHours, "hours", "", "the hours when the downloads should be executed (separated by comma, e.g. 1,2,3,4)")
 	flag.StringVar(&outputPath, "output", "./output", "output path (will be created if not exists)")
 	flag.BoolVar(&downloadFlag, "download", false, "download all matches")
@@ -120,7 +122,7 @@ func alreadyDownloaded(job Job) bool {
 	return false
 }
 
-func fetch(urls []string) {
+func fetch(urls []string, excludes []string) {
 	var jobs []Job
 
 	for _, url := range urls {
@@ -134,6 +136,19 @@ func fetch(urls []string) {
 
 					if uint64(videoLen/60) >= minimumVideoLenMinutes {
 						if serverModeFlag || downloadFlag {
+
+							isExcluded := false
+							videoTitle := strings.ToLower(item.Title)
+							for _, exclude := range excludes {
+								if strings.Contains(videoTitle, strings.ToLower(exclude)) {
+									isExcluded = true
+									break
+								}
+							}
+							if isExcluded {
+								continue
+							}
+
 							out, expandErr := expandPath(outputPath)
 							if expandErr != nil {
 								log.Fatal(expandErr)
@@ -235,6 +250,13 @@ func main() {
 		os.Exit(0)
 	}
 
+	var excludes []string
+	if excludeString != "" {
+		for _, singleExcludeString := range strings.Split(excludeString, "|") {
+			excludes = append(excludes, singleExcludeString)
+		}
+	}
+
 	var queries []string
 
 	if queryString != "" {
@@ -274,7 +296,7 @@ func main() {
 	if serverModeFlag {
 		for {
 			if shouldRun(operationalHours) {
-				fetch(queries)
+				fetch(queries, excludes)
 			} else {
 				time.Sleep(time.Duration(1) * time.Minute)
 				continue
@@ -283,6 +305,6 @@ func main() {
 			time.Sleep(time.Duration(interval) * time.Second)
 		}
 	} else {
-		fetch(queries)
+		fetch(queries, excludes)
 	}
 }
